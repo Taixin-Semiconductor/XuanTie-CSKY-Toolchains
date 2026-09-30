@@ -2,9 +2,14 @@
 
 [简体中文](README.zh-CN.md)
 
-Prebuilt XuanTie / C-SKY GCC cross-toolchains from [XRVM](https://www.xrvm.cn/).
+Prebuilt XuanTie / C-SKY GCC cross-toolchains. The Linux and Windows
+packages come from [XRVM](https://www.xrvm.cn/); the native macOS arm64
+package is a source build from the pinned V3.10 GCC/binutils tree. A
+separate macOS arm64 compatibility package runs the Linux vendor tools
+through elfuse.
 
-This repository stores binary release archives for building bare-metal C-SKY ELF ABI v2 firmware with the bundled minilibc runtime. It includes host packages for Linux x86_64 and Windows MinGW.
+These packages build bare-metal C-SKY ELF ABI v2 firmware with minilibc.
+Choose one host package; extract each into its own directory.
 
 ## Repository Contents
 
@@ -12,12 +17,17 @@ This repository stores binary release archives for building bare-metal C-SKY ELF
 | --- | --- | --- | --- | --- |
 | `csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz` | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
 | `csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz` | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
+| `csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz` | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
+| `csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz` | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
 
-The archive date is `20250328`, taken from the upstream package filenames.
+The vendor archives retain their upstream `20250328` date. The two
+`20260930` packages were assembled from the local, dated macOS build
+and elfuse evidence.
 
 ## Supported Target Variants
 
-The packaged multilib directories include:
+The vendor toolchain and native macOS package each report the same 40
+multilib rows. The elfuse package runs the vendor list. Directories include:
 
 - `ck801`
 - `ck802`
@@ -69,6 +79,55 @@ csky-elfabiv2-gcc.exe --version
 csky-elfabiv2-gdb.exe --version
 ```
 
+## Install on Apple Silicon macOS
+
+Both macOS archives extract to a different top-level directory. The native
+Mach-O tools declare macOS 14.0 as their minimum deployment target; elfuse
+declares macOS 14.4. These versions have not been tested on a second Mac.
+For the
+**native** source build:
+
+```sh
+tar -xJf csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz
+export PATH="$PWD/csky-elfabiv2-macos-arm64-native/bin:$PATH"
+csky-elfabiv2-gcc --version
+csky-elfabiv2-g++ --version
+csky-elfabiv2-gcc -print-multi-lib | wc -l  # 40
+```
+
+The native C/C++ frontends load GMP, MPFR, and libmpc from
+`/opt/homebrew/opt`. Install those Homebrew libraries before using the
+package on another Mac. This build has no `csky-elfabiv2-gdb`; it was
+configured with `--disable-gdb` and `--without-isl`.
+
+For the **vendor compiler through elfuse**, use a separate shell or replace
+the `PATH` entry above:
+
+```sh
+tar -xJf csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
+export PATH="$PWD/csky-elfabiv2-macos-arm64-elfuse/bin:$PATH"
+csky-elfabiv2-gcc --version
+csky-elfabiv2-g++ --version
+```
+
+This second archive contains the Linux vendor toolchain, its guest sysroot,
+and the signed macOS arm64 elfuse executable. Its wrappers resolve paths
+relative to the extracted directory. The guest GDB binary is present but
+its Mac-facing wrapper is omitted: it fails to start because the current
+guest sysroot lacks `libncurses.so.5`. SDKTools is not included. elfuse
+warns when the extracted sysroot is on a case-insensitive volume; the
+CK803 smoke checks passed there, but guest files with case-colliding names
+need a case-sensitive volume.
+
+The native archive was relocated and passed CK803 C/C++ compile/link checks
+after packaging. The elfuse archive passed the same relocated smoke checks;
+the earlier workspace path also completed a TXW8301 SDKTools build and
+package with 197 Ninja steps. The native package passed 120 C/C++/float
+compile/link checks across its 40 multilib rows. These are host-side checks:
+neither package has demonstrated target execution or hardware behavior,
+and the native source-built `libgcc.a` and `libstdc++.a` are not
+byte-identical to the vendor archives.
+
 ## Basic Usage
 
 The primary command prefix is:
@@ -87,7 +146,7 @@ csky-elfabiv2-ld
 csky-elfabiv2-objcopy
 csky-elfabiv2-objdump
 csky-elfabiv2-size
-csky-elfabiv2-gdb
+csky-elfabiv2-gdb  # Linux and Windows vendor packages only
 ```
 
 The archives also include `csky-abiv2-elf-*` command names. Use the prefix expected by your build system or SDK.
@@ -102,8 +161,12 @@ Real firmware projects usually also need a board-specific startup file, linker s
 
 ## Notes
 
-- These are prebuilt binary toolchains, not source packages.
-- Do not extract the Linux and Windows archives into the same directory unless you intentionally want to mix host files.
+- These are binary toolchains, not complete source packages. The native
+  archive includes the macOS patch copies and build instructions under
+  `source-info/`; the elfuse archive includes its Apache-2.0 license.
+- Keep the host packages in separate directories.
 - Some bundled text strings may refer to component versions that differ from the GCC command name. Run `--version` after extraction if you need exact component provenance.
-- No standalone license file was found in these package archives. Check the upstream XRVM package page and the licenses of GCC, binutils, GDB, minilibc, and other bundled components before redistributing.
-- The archive files are below GitHub's normal 100 MB per-file limit at the time this README was written. Future larger releases may need Git LFS or GitHub Releases.
+- No standalone license file was found in the original vendor archives.
+  Check the upstream XRVM package page and the licenses of GCC, binutils,
+  GDB, minilibc, and other bundled components before redistributing.
+- The macOS toolchain is experimental, do not assume it will produce binary that is equivalent to the vendor toolchain. 
