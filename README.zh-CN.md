@@ -18,6 +18,7 @@ GCC/binutils 源码构建。另有 macOS arm64 兼容包，通过 elfuse 运行 
 | `csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz` | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 命令名和版本目录使用 `6.3.0`；包含 binutils、GDB、minilibc、多库支持 | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
 | `csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz` | macOS arm64 原生 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0、binutils 2.27、40 种 multilib；C/C++；无 GDB；依赖 Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
 | `csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz` | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过随包 elfuse 和客户机 sysroot 运行固定版本的 Linux x86_64 厂商 GCC 6.3.0；未提供 GDB 包装命令 | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
+| `csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz` | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过 elfuse 运行厂商 GCC 6.3.0 与 GDB 7.12；完整 ncurses5/tinfo5 运行库；GDB/MI 与有限硬件调试验证通过 | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
 
 厂商包保留上游文件名中的 `20250328`。两个 `20260930` 包来自本地
 有日期记录的 macOS 构建与 elfuse 验证。
@@ -79,7 +80,8 @@ csky-elfabiv2-gdb.exe --version
 
 ## Apple Silicon macOS 安装
 
-两个 macOS 包分别解压到不同的顶层目录。原生 Mach-O 工具声明的
+原生包与 elfuse 包使用不同的顶层目录；两个 elfuse 包共享顶层目录，
+请解压到独立的目标目录。原生 Mach-O 工具声明的
 最低部署目标为 macOS 14.0，elfuse 声明 macOS 14.4；尚未在第二台
 Mac 上验证这些最低版本。使用**原生**源码构建包：
 
@@ -115,9 +117,57 @@ CK803 小型编译/链接检查仍然通过，但客户机文件名大小写冲�
 原生包在搬移后通过了 CK803 C/C++ 编译/链接检查；elfuse 包也通过了
 相同检查。此前工作目录中的 elfuse 路径还完成了 TXW8301 SDKTools
 构建与打包，共 197 个 Ninja 步骤。原生包的 40 种 multilib 共通过
-120 个 C/C++/浮点编译与链接检查。这些均为主机侧结果，尚无目标端执行
-或真实硬件验证；原生源码构建的 `libgcc.a` 和 `libstdc++.a` 也与
+120 个 C/C++/浮点编译与链接检查。上述原始编译器包验证均为主机侧结果。
+20261009 更新包的有限硬件调试验证见下文，尚未证明完整应用执行；原生源码构建的 `libgcc.a` 和 `libstdc++.a` 也与
 厂商包不逐字节一致。
+
+### macOS 厂商 GDB 更新包（2026-10-09）
+
+新增的 `csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`
+为现有厂商工具链/elfuse 组件提供 Mac 侧 `csky-elfabiv2-gdb` 包装命令。
+客户机包含经 SHA-256 校验的 Debian Bookworm amd64 `libncurses5` 和
+`libtinfo5` 6.4-4，并加入客户机 `elfuse` 主机名映射。包中包含可搬移的 GDB
+包装命令，以及经过验证的厂商 GDB 7.12 所需的完整客户机运行库。
+
+将计算得到的 SHA-256 与上表比对后，解压到独立目录：
+
+```sh
+shasum -a 256 csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz
+mkdir -p /path/to/new-csky-gdb
+# 使用空目录；旧 elfuse 包与此包具有相同顶层目录。
+tar -xJf csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz -C /path/to/new-csky-gdb
+export PATH="/path/to/new-csky-gdb/csky-elfabiv2-macos-arm64-elfuse/bin:$PATH"
+printf '1-gdb-version\n2-gdb-exit\n' | csky-elfabiv2-gdb -nx -nh --interpreter=mi2
+```
+
+全新解压通过了清单/摘要校验、GDB 7.12 MI2 启动和本地 C-SKY ELF 符号
+加载。配合单独准备的 XuanTie DebugServer r2 包，SDKTools CLI/MCP 在
+已测试的 CK-Link Lite V2 app 2.32 与 CK803SG 开发板上完成连接，以及
+寄存器、调用栈、全局字段和内存读取。在此前 RAM 加载的 `main`
+（`0x20005B40`）执行一条指令，命中 `main+2`（`0x20005B42`）的硬件断点；
+随后删除断点，释放测试进程和端口。未执行烧写、RAM 加载、PC 赋值或
+显式复位命令。完整应用运行、第二台 Mac 和其他探针兼容性仍未验证。
+SDKTools 与 DebugServer 是单独的包，不包含在本工具链包中。
+
+使用独立脚本从固定输入重建：
+
+```sh
+python3 scripts/refresh-elfuse-vendor.py \
+  --bundle-archive csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
+  --vendor-archive csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \
+  --libncurses5-deb /path/to/libncurses5_6.4-4_amd64.deb \
+  --libtinfo5-deb /path/to/libtinfo5_6.4-4_amd64.deb \
+  --output /path/to/new/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz
+python3 scripts/test_refresh_vendor.py
+```
+
+脚本校验四个输入的摘要，保留已验证的 elfuse 运行时，重新生成来源及
+完整性清单，并校验全新解压结果；已有输出文件会被拒绝覆盖。Debian 输入
+SHA-256 分别为
+`02f4f7f52c4ce2fc4021793a931bfd85f7870554b8e4d56576d73a4ed0bdb390`
+（`libncurses5`）和
+`dd347f794e651039e7b4c391f86c674fed7f415b3dca6b0937beb0d470f09c1a`
+（`libtinfo5`）。客户机中保留对应版权说明。
 
 ## 基本用法
 
@@ -137,7 +187,7 @@ csky-elfabiv2-ld
 csky-elfabiv2-objcopy
 csky-elfabiv2-objdump
 csky-elfabiv2-size
-csky-elfabiv2-gdb  # 仅 Linux 和 Windows 厂商包
+csky-elfabiv2-gdb  # Linux/Windows 厂商包及 20261009 macOS GDB 更新包
 ```
 
 压缩包中也包含 `csky-abiv2-elf-*` 命令名称。请使用你的构建系统或 SDK 所要求的前缀。

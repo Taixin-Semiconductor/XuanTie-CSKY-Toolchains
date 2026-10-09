@@ -19,6 +19,7 @@ Choose one host package; extract each into its own directory.
 | `csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz` | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
 | `csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz` | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
 | `csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz` | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
+| `csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz` | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Vendor GCC 6.3.0 and GDB 7.12 through elfuse; complete ncurses5/tinfo5 runtime; GDB/MI and bounded hardware debugging verified | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
 
 The vendor archives retain their upstream `20250328` date. The two
 `20260930` packages were assembled from the local, dated macOS build
@@ -81,7 +82,8 @@ csky-elfabiv2-gdb.exe --version
 
 ## Install on Apple Silicon macOS
 
-Both macOS archives extract to a different top-level directory. The native
+The native and elfuse packages use different top-level directories. The two
+elfuse packages share a top-level directory; extract them into separate destinations. The native
 Mach-O tools declare macOS 14.0 as their minimum deployment target; elfuse
 declares macOS 14.4. These versions have not been tested on a second Mac.
 For the
@@ -123,10 +125,61 @@ The native archive was relocated and passed CK803 C/C++ compile/link checks
 after packaging. The elfuse archive passed the same relocated smoke checks;
 the earlier workspace path also completed a TXW8301 SDKTools build and
 package with 197 Ninja steps. The native package passed 120 C/C++/float
-compile/link checks across its 40 multilib rows. These are host-side checks:
-neither package has demonstrated target execution or hardware behavior,
-and the native source-built `libgcc.a` and `libstdc++.a` are not
+compile/link checks across its 40 multilib rows. These original compiler-package checks are host-side. Bounded hardware
+debugger evidence for the 20261009 refresh is described below; full application
+execution is not established. The native source-built `libgcc.a` and `libstdc++.a` are not
 byte-identical to the vendor archives.
+
+### macOS vendor GDB refresh (2026-10-09)
+
+The new `csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`
+adds the Mac-facing `csky-elfabiv2-gdb` launcher to the existing vendor/elfuse
+component. The guest runtime includes checksum-pinned Debian Bookworm amd64
+`libncurses5` and `libtinfo5` 6.4-4, plus the guest `elfuse` hostname alias.
+The package includes a relocatable GDB launcher and the complete guest
+runtime required by the tested vendor GDB 7.12.
+
+Compare the printed SHA-256 with the table above, then extract into a separate destination:
+
+```sh
+shasum -a 256 csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz
+mkdir -p /path/to/new-csky-gdb
+# Use an empty destination; the older elfuse archive has the same top-level directory.
+tar -xJf csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz -C /path/to/new-csky-gdb
+export PATH="/path/to/new-csky-gdb/csky-elfabiv2-macos-arm64-elfuse/bin:$PATH"
+printf '1-gdb-version\n2-gdb-exit\n' | csky-elfabiv2-gdb -nx -nh --interpreter=mi2
+```
+
+Fresh extraction passed manifest/checksum checks, GDB 7.12 MI2 startup, and
+local C-SKY ELF symbol loading. With the separately prepared XuanTie
+DebugServer r2 bundle, SDKTools CLI/MCP attach and register/stack/global/memory
+reads passed on the tested CK-Link Lite V2 app 2.32 and CK803SG board. One
+instruction step from the previously RAM-loaded `main` at `0x20005B40` hit a
+hardware breakpoint at `main+2`, `0x20005B42`; the breakpoint was removed and
+all test processes/ports were released. No flash, RAM-load, PC-assignment or
+explicit-reset command was issued. Full application execution, another Mac,
+and general probe compatibility remain unproven. SDKTools and DebugServer are
+separate packages; neither is bundled in this archive.
+
+Rebuild from the pinned inputs with the standalone helper:
+
+```sh
+python3 scripts/refresh-elfuse-vendor.py \
+  --bundle-archive csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
+  --vendor-archive csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \
+  --libncurses5-deb /path/to/libncurses5_6.4-4_amd64.deb \
+  --libtinfo5-deb /path/to/libtinfo5_6.4-4_amd64.deb \
+  --output /path/to/new/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz
+python3 scripts/test_refresh_vendor.py
+```
+
+The helper verifies all four input hashes, preserves the trusted elfuse
+runtime, regenerates provenance and integrity manifests, and checks a fresh
+extraction. It refuses existing outputs. The Debian input SHA-256 values are
+`02f4f7f52c4ce2fc4021793a931bfd85f7870554b8e4d56576d73a4ed0bdb390`
+(`libncurses5`) and
+`dd347f794e651039e7b4c391f86c674fed7f415b3dca6b0937beb0d470f09c1a`
+(`libtinfo5`). Package copyright notices are retained in the guest sysroot.
 
 ## Basic Usage
 
@@ -146,7 +199,7 @@ csky-elfabiv2-ld
 csky-elfabiv2-objcopy
 csky-elfabiv2-objdump
 csky-elfabiv2-size
-csky-elfabiv2-gdb  # Linux and Windows vendor packages only
+csky-elfabiv2-gdb  # Linux/Windows vendor packages and the 20261009 macOS GDB refresh
 ```
 
 The archives also include `csky-abiv2-elf-*` command names. Use the prefix expected by your build system or SDK.
