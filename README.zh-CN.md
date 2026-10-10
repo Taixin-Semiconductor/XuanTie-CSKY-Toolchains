@@ -12,18 +12,18 @@ GCC/binutils 源码构建，上游为
 选择一个包，并分别解压到独立目录。
 
 Git 仓库保存打包源码、文档和 [SHA256SUMS](SHA256SUMS)；工具链压缩包作为固定发布版本
-`toolchains-20261009` 的资源分发。`git clone` 不会下载这些二进制文件。请从上表下载所需资源，
+`untagged-714ed6e395fc96712ea8` 的资源分发。`git clone` 不会下载这些二进制文件。请从上表下载所需资源，
 解压前按 [SHA256SUMS](SHA256SUMS) 中对应条目校验 SHA-256。
 
 ## 仓库内容
 
 | 压缩包 | 主机系统 | 目标平台 | 说明 | SHA256 |
 | --- | --- | --- | --- | --- |
-| [`csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz) | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 命令名和版本目录使用 `6.3.0`；包含 binutils、GDB、minilibc、多库支持 | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
-| [`csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz) | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 命令名和版本目录使用 `6.3.0`；包含 binutils、GDB、minilibc、多库支持 | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
-| [`csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz) | macOS arm64 原生 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0、binutils 2.27、40 种 multilib；C/C++；无 GDB；依赖 Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
-| [`csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过随包 elfuse 和客户机 sysroot 运行固定版本的 Linux x86_64 厂商 GCC 6.3.0；未提供 GDB 包装命令 | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
-| [`csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过 elfuse 运行厂商 GCC 6.3.0 与 GDB 7.12；完整 ncurses5/tinfo5 运行库；GDB/MI 与有限硬件调试验证通过 | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
+| [`csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz) | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 命令名和版本目录使用 `6.3.0`；包含 binutils、GDB、minilibc、多库支持 | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
+| [`csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz) | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 命令名和版本目录使用 `6.3.0`；包含 binutils、GDB、minilibc、多库支持 | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
+| [`csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz) | macOS arm64 原生 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0、binutils 2.27、40 种 multilib；C/C++；无 GDB；依赖 Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过随包 elfuse 和客户机 sysroot 运行固定版本的 Linux x86_64 厂商 GCC 6.3.0；未提供 GDB 包装命令 | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | 通过 elfuse 运行厂商 GCC 6.3.0 与 GDB 7.12；完整 ncurses5/tinfo5 运行库；GDB/MI 与有限硬件调试验证通过 | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
 
 厂商包保留上游文件名中的 `20250328`。两个 `20260930` 包来自本地
 有日期记录的 macOS 构建与 elfuse 验证。
@@ -181,10 +181,10 @@ SDKTools 与 DebugServer 是单独的包，不包含在本工具链包中。
 ```sh
 curl -fL --retry 3 \
   -o csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
-  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
 curl -fL --retry 3 \
   -o csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \
-  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
 shasum -a 256 csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
 
 python3 scripts/refresh-elfuse-vendor.py \

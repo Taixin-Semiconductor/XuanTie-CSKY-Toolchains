@@ -13,7 +13,7 @@ These packages build bare-metal C-SKY ELF ABI v2 firmware with minilibc.
 Choose one host package; extract each into its own directory.
 
 Git keeps the packaging sources, documentation, and [SHA256SUMS](SHA256SUMS). The toolchain
-archives are distributed as assets on the pinned GitHub Release `toolchains-20261009`. A
+archives are distributed as assets on the pinned GitHub Release `untagged-714ed6e395fc96712ea8`. A
 `git clone` does not download the binaries. Download the selected asset from the table and
 check its SHA-256 against the matching row in [SHA256SUMS](SHA256SUMS) before extraction.
 
@@ -21,11 +21,11 @@ check its SHA-256 against the matching row in [SHA256SUMS](SHA256SUMS) before ex
 
 | Archive | Host system | Target | Notes | SHA256 |
 | --- | --- | --- | --- | --- |
-| [`csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz) | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
-| [`csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz) | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
-| [`csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz) | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
-| [`csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz) | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
-| [`csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Vendor GCC 6.3.0 and GDB 7.12 through elfuse; complete ncurses5/tinfo5 runtime; GDB/MI and bounded hardware debugging verified | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
+| [`csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz) | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
+| [`csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz) | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
+| [`csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz) | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz) | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Vendor GCC 6.3.0 and GDB 7.12 through elfuse; complete ncurses5/tinfo5 runtime; GDB/MI and bounded hardware debugging verified | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
 
 The vendor archives retain their upstream `20250328` date. The two
 `20260930` packages were assembled from the local, dated macOS build
@@ -197,10 +197,10 @@ verifies their pinned hashes:
 ```sh
 curl -fL --retry 3 \
   -o csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
-  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
 curl -fL --retry 3 \
   -o csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \
-  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/untagged-714ed6e395fc96712ea8/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
 shasum -a 256 csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
 
 python3 scripts/refresh-elfuse-vendor.py \

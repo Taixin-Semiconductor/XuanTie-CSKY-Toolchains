@@ -12,11 +12,11 @@ temporary directory and compare its SHA-256 and size with the local copy; run
 resolves to the intended clean commit and every uploaded asset passes this check. Keep published
 assets immutable; corrections require a new tag and release.
 
-The `toolchains-20261009` URL used in the READMEs is the pinned asset path for this migration; the
-links become usable after the draft release is published with that tag. SDKTools download URL
-migration is a separate follow-up: removing the archives from Git history breaks consumers still
-using raw-GitHub archive URLs. Update those consumers to the pinned release assets when the release
-is published. Keep the existing Gitee mirror archives until
+The READMEs pin downloads to the published GitHub Release
+[`untagged-714ed6e395fc96712ea8`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/tag/untagged-714ed6e395fc96712ea8).
+SDKTools download URL migration is a separate follow-up: removing the archives from Git history
+breaks consumers still using raw-GitHub archive URLs. Update those consumers to the published,
+pinned release assets. Keep the existing Gitee mirror archives until
 that mirror is migrated separately. The force-sync Gitee workflow is opt-in through the repository
 variable `GITEE_GIT_MIRROR_ENABLED=true`; keep it unset or false during history replacement and
 enable it only after Gitee binary distribution has migrated. Before history replacement, verify
