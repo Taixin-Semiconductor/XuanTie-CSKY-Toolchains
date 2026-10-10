@@ -1,0 +1,7 @@
+# Generated release archives in the repository root
+/*.tar.gz
+/*.tar.xz
+/*.zip
+
+# Python cache directories
+__pycache__/

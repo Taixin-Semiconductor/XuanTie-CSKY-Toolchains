@@ -1,0 +1,642 @@
+diff --git a/bfd/csky-callgraph-bfd.c b/bfd/csky-callgraph-bfd.c
+index beac94d7..81660257 100644
+--- a/bfd/csky-callgraph-bfd.c
++++ b/bfd/csky-callgraph-bfd.c
+@@ -90,7 +90,7 @@ func_vec_clean (func_vec ** list)
+ 
+ bfd_boolean
+ callgraph_hash_table_init (struct callgraph_hash_table * table,
+-                           struct callgraph_hash_entry *
++                           struct bfd_hash_entry *
+                            (*newfunc) (struct bfd_hash_entry *,
+                                        struct bfd_hash_table *, const char *),
+                            unsigned int entsize)
+@@ -124,7 +124,7 @@ callgraph_hash_traverse (struct callgraph_hash_table *table,
+                      info);
+ }
+ 
+-struct callgraph_hash_entry *
++struct bfd_hash_entry *
+ callgraph_hash_newfunc (struct bfd_hash_entry *entry,
+                         struct bfd_hash_table *table, const char *string)
+ {
+diff --git a/bfd/csky-callgraph-bfd.h b/bfd/csky-callgraph-bfd.h
+index bcd6e3fd..f6533bd0 100644
+--- a/bfd/csky-callgraph-bfd.h
++++ b/bfd/csky-callgraph-bfd.h
+@@ -92,7 +92,7 @@ extern void func_vec_clean (func_vec ** list);
+ 
+ extern bfd_boolean callgraph_hash_table_init (struct callgraph_hash_table
+     *table,
+-    struct callgraph_hash_entry
++    struct bfd_hash_entry
+     *(*newfunc) (struct
+                  bfd_hash_entry *,
+                  struct
+@@ -110,7 +110,7 @@ extern void callgraph_hash_traverse (struct callgraph_hash_table *table,
+                                          callgraph_hash_entry
+                                          *, void *),
+                                      void *info);
+-extern struct callgraph_hash_entry *callgraph_hash_newfunc (struct
++extern struct bfd_hash_entry *callgraph_hash_newfunc (struct
+     bfd_hash_entry
+     *entry,
+     struct
+diff --git a/bfd/elf-bfd.h b/bfd/elf-bfd.h
+index 2f37d26a..927a77ea 100644
+--- a/bfd/elf-bfd.h
++++ b/bfd/elf-bfd.h
+@@ -2263,6 +2263,8 @@ extern bfd_boolean _bfd_elf_notice_as_needed
+ 
+ extern struct elf_link_hash_entry *_bfd_elf_archive_symbol_lookup
+   (bfd *, struct bfd_link_info *, const char *);
++extern void bfd_csky_defer_printf_selection
++  (bfd_boolean);
+ extern bfd_boolean bfd_elf_link_add_symbols
+   (bfd *, struct bfd_link_info *);
+ extern bfd_boolean _bfd_elf_add_dynamic_entry
+diff --git a/bfd/elf32-csky.c b/bfd/elf32-csky.c
+index 1e550ecf..49a05cd9 100644
+--- a/bfd/elf32-csky.c
++++ b/bfd/elf32-csky.c
+@@ -5977,6 +5977,168 @@ elf32_csky_obj_attrs_handle_unknown (bfd *abfd ATTRIBUTE_UNUSED, int tag ATTRIBU
+   return TRUE;
+ }
+ 
++/* The minilibc printf archive contains several definitions of __v2_printf.
++   A plain archive search takes the first one, which need not implement the
++   formats requested by .required references.  The names below are the
++   selector symbols exported by that archive.  */
++static const struct
++{
++  const char *name;
++  unsigned int bit;
++  const char *suffix;
++} csky_printf_features[] =
++{
++  { "_printf_d",           0x002, "D" },
++  { "_printf_f",           0x100, "F" },
++  { "_printf_p",           0x008, "H" },
++  { "_printf_lld",         0x080, "Ll" },
++  { "_printf_m",           0x200, "M" },
++  { "_printf_o",           0x004, "O" },
++  { "_printf_pre_padding", 0x040, "Pp" },
++  { "_printf_s",           0x001, "S" },
++  { "_printf_sizespec",    0x020, "Ss" },
++  { "_printf_widthprec",   0x010, "Wp" }
++};
++
++/* The order is significant: choose the first available implementation that
++   contains every requested feature.  It is the order used by the V3.10.33
++   linker with the bundled minilibc archive.  */
++static const unsigned short csky_printf_variants[] =
++{
++  0x001, 0x011, 0x002, 0x003, 0x013, 0x023, 0x033, 0x063,
++  0x073, 0x0e3, 0x0f3, 0x00b, 0x01b, 0x02b, 0x03b, 0x06b,
++  0x07b, 0x0eb, 0x0fb, 0x00f, 0x01f, 0x02f, 0x03f, 0x06f,
++  0x07f, 0x0ef, 0x0ff, 0x1ff, 0x3ff
++};
++
++/* ld delays selecting a variant until every input has contributed its
++   .required references.  Other BFD users retain immediate selection.  */
++static bfd_boolean csky_printf_selection_deferred;
++
++void
++bfd_csky_defer_printf_selection (bfd_boolean defer)
++{
++  csky_printf_selection_deferred = defer;
++}
++
++static bfd_boolean
++csky_printf_variant_archive_p (bfd *abfd)
++{
++  symindex i;
++  carsym *symbols = bfd_ardata (abfd)->symdefs;
++
++  for (i = 0; i < bfd_ardata (abfd)->symdef_count; ++i)
++    if (strcmp (symbols[i].name, "__v2_printf$DFHLlMOPpSSsWp") == 0)
++      return TRUE;
++  return FALSE;
++}
++
++static bfd_boolean
++csky_printf_undefined_p (struct bfd_link_info *info, const char *name)
++{
++  struct elf_link_hash_entry *h;
++
++  h = elf_link_hash_lookup (elf_hash_table (info), name, FALSE, FALSE, TRUE);
++  return h != NULL && (h->root.type == bfd_link_hash_undefined
++                       || h->root.type == bfd_link_hash_undefweak);
++}
++
++static unsigned int
++csky_printf_required_mask (struct bfd_link_info *info)
++{
++  unsigned int mask = 0;
++  unsigned int i;
++
++  for (i = 0; i < sizeof (csky_printf_features)
++                 / sizeof (csky_printf_features[0]); ++i)
++    if (csky_printf_undefined_p (info, csky_printf_features[i].name))
++      mask |= csky_printf_features[i].bit;
++  return mask;
++}
++
++static bfd_boolean
++csky_printf_explicit_variant_p (bfd *abfd, struct bfd_link_info *info)
++{
++  symindex i;
++  carsym *symbols = bfd_ardata (abfd)->symdefs;
++
++  for (i = 0; i < bfd_ardata (abfd)->symdef_count; ++i)
++    if (strncmp (symbols[i].name, "__v2_printf$", 12) == 0
++        && csky_printf_undefined_p (info, symbols[i].name))
++      return TRUE;
++  return FALSE;
++}
++
++static void
++csky_printf_variant_name (unsigned int required, char name[32])
++{
++  unsigned int chosen = 0x3ff;
++  unsigned int i;
++  char *out = name;
++
++  for (i = 0; i < sizeof (csky_printf_variants)
++                 / sizeof (csky_printf_variants[0]); ++i)
++    if ((csky_printf_variants[i] & required) == required)
++      {
++        chosen = csky_printf_variants[i];
++        break;
++      }
++
++  memcpy (out, "__v2_printf$", 12);
++  out += 12;
++  for (i = 0; i < sizeof (csky_printf_features)
++                 / sizeof (csky_printf_features[0]); ++i)
++    if (chosen & csky_printf_features[i].bit)
++      {
++        size_t length = strlen (csky_printf_features[i].suffix);
++        memcpy (out, csky_printf_features[i].suffix, length);
++        out += length;
++      }
++  *out = '\0';
++}
++
++/* Resolve the suffixed selector before the unsuffixed __v2_printf entry can
++   extract the small S member.  Leave ordinary archives and explicit -u
++   selector requests under the generic ELF archive rules.  */
++static struct elf_link_hash_entry *
++csky_elf_archive_symbol_lookup (bfd *abfd, struct bfd_link_info *info,
++                                const char *name)
++{
++  struct elf_link_hash_entry *base;
++  unsigned int required;
++  bfd_boolean explicit_variant;
++  char selected[32];
++
++  if (strcmp (name, "__v2_printf") != 0
++      && strncmp (name, "__v2_printf$", 12) != 0)
++    return _bfd_elf_archive_symbol_lookup (abfd, info, name);
++
++  if (!csky_printf_variant_archive_p (abfd))
++    return _bfd_elf_archive_symbol_lookup (abfd, info, name);
++
++  base = _bfd_elf_archive_symbol_lookup (abfd, info, "__v2_printf");
++  if (base == NULL || base == (struct elf_link_hash_entry *) 0 - 1
++      || (base->root.type != bfd_link_hash_undefined
++          && base->root.type != bfd_link_hash_undefweak))
++    return _bfd_elf_archive_symbol_lookup (abfd, info, name);
++
++  required = csky_printf_required_mask (info);
++  explicit_variant = csky_printf_explicit_variant_p (abfd, info);
++  if (strcmp (name, "__v2_printf") == 0)
++    return csky_printf_selection_deferred || required != 0 || explicit_variant
++      ? NULL : base;
++
++  if (explicit_variant || required == 0)
++    return _bfd_elf_archive_symbol_lookup (abfd, info, name);
++
++  if (csky_printf_selection_deferred)
++    return NULL;
++
++  csky_printf_variant_name (required, selected);
++  return strcmp (name, selected) == 0 ? base
++    : _bfd_elf_archive_symbol_lookup (abfd, info, name);
++}
++
+ /* End of external entry points for sizing and building linker stubs.  */
+ 
+ /* CPU related basical API. */
+@@ -5998,6 +6160,7 @@ elf32_csky_obj_attrs_handle_unknown (bfd *abfd ATTRIBUTE_UNUSED, int tag ATTRIBU
+ #define bfd_elf32_bfd_merge_private_bfd_data  csky_elf_merge_private_bfd_data
+ #define bfd_elf32_bfd_set_private_flags       csky_elf_set_private_flags
+ #define elf_backend_copy_indirect_symbol      csky_elf_copy_indirect_symbol
++#define elf_backend_archive_symbol_lookup     csky_elf_archive_symbol_lookup
+ 
+ /* Attribute sections.  */
+ #undef  elf_backend_obj_attrs_vendor
+diff --git a/ld/emultempl/cskyelf.em b/ld/emultempl/cskyelf.em
+index 8a03e3d4..0a8d3c94 100644
+--- a/ld/emultempl/cskyelf.em
++++ b/ld/emultempl/cskyelf.em
+@@ -149,6 +149,7 @@ fragment <<EOF
+ static void
+ csky_elf_create_output_section_statements (void)
+ {
++  bfd_csky_defer_printf_selection (TRUE);
+   use_branch_stub = FALSE;
+ }
+ EOF
+@@ -161,6 +162,7 @@ fragment <<EOF
+ static void
+ csky_elf_create_output_section_statements (void)
+ {
++  bfd_csky_defer_printf_selection (TRUE);
+   /* If don't use branch stub, just do not emit stub_file*/
+   if (use_branch_stub == FALSE)
+     {
+@@ -672,6 +674,23 @@ PARSE_AND_LIST_ARGS_CASES='
+ esac
+ 
+ LDEMUL_AFTER_ALLOCATION=gld${EMULATION_NAME}_after_allocation
++fragment <<EOF
++/* C-SKY archive references can be introduced by libraries appearing later
++   on the command line.  Finish their fixed-point search before the normal
++   ELF after-open processing.  */
++static void
++csky_elf_after_open (void)
++{
++  /* Archive cycles can introduce new requirements.  Resolve them before
++     choosing the printf implementation.  */
++  lang_rescan_archives ();
++  bfd_csky_defer_printf_selection (FALSE);
++  /* Pull the selected printf member and its dependencies.  */
++  lang_rescan_archives ();
++  gld${EMULATION_NAME}_after_open ();
++}
++EOF
++LDEMUL_AFTER_OPEN=csky_elf_after_open
+ LDEMUL_CREATE_OUTPUT_SECTION_STATEMENTS=csky_elf_create_output_section_statements
+ LDEMUL_FINISH=gld${EMULATION_NAME}_finish
+ LDEMUL_ARCH_MAP=csky_map
+diff --git a/ld/ldlang.c b/ld/ldlang.c
+index b9d9757e..4070f15b 100644
+--- a/ld/ldlang.c
++++ b/ld/ldlang.c
+@@ -3421,7 +3421,8 @@ enum open_bfd_mode
+   {
+     OPEN_BFD_NORMAL = 0,
+     OPEN_BFD_FORCE = 1,
+-    OPEN_BFD_RESCAN = 2
++    OPEN_BFD_RESCAN = 2,
++    OPEN_BFD_ARCHIVES_ONLY = 4
+   };
+ #ifdef ENABLE_PLUGINS
+ static lang_input_statement_type *plugin_insert = NULL;
+@@ -3486,13 +3487,15 @@ open_input_bfds (lang_statement_union_type *s, enum open_bfd_mode mode)
+ 	      if (mode != OPEN_BFD_NORMAL
+ #ifdef ENABLE_PLUGINS
+ 		  && ((mode & OPEN_BFD_RESCAN) == 0
+-		      || plugin_insert == NULL)
++		      || plugin_insert == NULL
++		      || (mode & OPEN_BFD_ARCHIVES_ONLY) != 0)
+ #endif
+ 		  && s->input_statement.flags.loaded
+ 		  && (abfd = s->input_statement.the_bfd) != NULL
+ 		  && ((bfd_get_format (abfd) == bfd_archive
+ 		       && !s->input_statement.flags.whole_archive)
+-		      || (bfd_get_format (abfd) == bfd_object
++		      || ((mode & OPEN_BFD_ARCHIVES_ONLY) == 0
++			  && bfd_get_format (abfd) == bfd_object
+ 			  && ((abfd->flags) & DYNAMIC) != 0
+ 			  && s->input_statement.flags.add_DT_NEEDED_for_regular
+ 			  && bfd_get_flavour (abfd) == bfd_target_elf_flavour
+@@ -3553,6 +3556,24 @@ open_input_bfds (lang_statement_union_type *s, enum open_bfd_mode mode)
+     einfo ("%F");
+ }
+ 
++/* The C-SKY vendor linker revisits archives after later libraries introduce
++   new undefined references.  Use the same archive reload path as an explicit
++   group, but leave objects and --as-needed shared libraries alone.  */
++void
++lang_rescan_archives (void)
++{
++  struct bfd_link_hash_entry *undefs;
++
++  do
++    {
++      undefs = link_info.hash->undefs_tail;
++      current_target = default_target;
++      open_input_bfds (statement_list.head,
++                       OPEN_BFD_RESCAN | OPEN_BFD_ARCHIVES_ONLY);
++    }
++  while (undefs != link_info.hash->undefs_tail);
++}
++
+ /* Add the supplied name to the symbol table as an undefined reference.
+    This is a two step process as the symbol table doesn't even exist at
+    the time the ld command line is processed.  First we put the name
+diff --git a/ld/ldlang.h b/ld/ldlang.h
+index 06c36944..60646348 100644
+--- a/ld/ldlang.h
++++ b/ld/ldlang.h
+@@ -588,6 +588,8 @@ extern void lang_relax_sections
+   (bfd_boolean);
+ extern void lang_process
+   (void);
++extern void lang_rescan_archives
++  (void);
+ extern void lang_section_start
+   (const char *, union etree_union *, const segment_type *);
+ extern void lang_add_entry
+diff --git a/readline/rltty.c b/readline/rltty.c
+index d237b1c0..94957b14 100644
+--- a/readline/rltty.c
++++ b/readline/rltty.c
+@@ -37,9 +37,9 @@
+ 
+ #include "rldefs.h"
+ 
+-#if defined (GWINSZ_IN_SYS_IOCTL)
++#if defined (GWINSZ_IN_SYS_IOCTL) || defined (__APPLE__)
+ #  include <sys/ioctl.h>
+-#endif /* GWINSZ_IN_SYS_IOCTL */
++#endif /* GWINSZ_IN_SYS_IOCTL || __APPLE__ */
+ 
+ #include "rltty.h"
+ #include "readline.h"
+diff --git a/readline/terminal.c b/readline/terminal.c
+index 8094186b..35c8a2a1 100644
+--- a/readline/terminal.c
++++ b/readline/terminal.c
+@@ -51,9 +51,9 @@
+ /* System-specific feature definitions and include files. */
+ #include "rldefs.h"
+ 
+-#if defined (GWINSZ_IN_SYS_IOCTL) && !defined (TIOCGWINSZ)
++#if (defined (GWINSZ_IN_SYS_IOCTL) && !defined (TIOCGWINSZ)) || defined (__APPLE__)
+ #  include <sys/ioctl.h>
+-#endif /* GWINSZ_IN_SYS_IOCTL && !TIOCGWINSZ */
++#endif /* (GWINSZ_IN_SYS_IOCTL && !TIOCGWINSZ) || __APPLE__ */
+ 
+ #ifdef __MSDOS__
+ # include <pc.h>
+diff --git a/ld/testsuite/ld-csky/archive-first.s b/ld/testsuite/ld-csky/archive-first.s
+new file mode 100644
+index 00000000..86411e86
+--- /dev/null
++++ b/ld/testsuite/ld-csky/archive-first.s
+@@ -0,0 +1,5 @@
++ .section .text
++ .globl early_symbol
++early_symbol:
++ .long 0
++ .required _printf_m
+diff --git a/ld/testsuite/ld-csky/archive-later.s b/ld/testsuite/ld-csky/archive-later.s
+new file mode 100644
+index 00000000..267d8771
+--- /dev/null
++++ b/ld/testsuite/ld-csky/archive-later.s
+@@ -0,0 +1,4 @@
++ .section .text
++ .globl later_symbol
++later_symbol:
++ .long early_symbol
+diff --git a/ld/testsuite/ld-csky/archive-main.s b/ld/testsuite/ld-csky/archive-main.s
+new file mode 100644
+index 00000000..ab87cee6
+--- /dev/null
++++ b/ld/testsuite/ld-csky/archive-main.s
+@@ -0,0 +1,4 @@
++ .section .text
++ .globl __start
++__start:
++ .long later_symbol
+diff --git a/ld/testsuite/ld-csky/archive-trigger.s b/ld/testsuite/ld-csky/archive-trigger.s
+new file mode 100644
+index 00000000..03e2f5be
+--- /dev/null
++++ b/ld/testsuite/ld-csky/archive-trigger.s
+@@ -0,0 +1,2 @@
++ .section .text
++ .long later_symbol
+diff --git a/ld/testsuite/ld-csky/printf-archive.exp b/ld/testsuite/ld-csky/printf-archive.exp
+new file mode 100644
+index 00000000..3a307491
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-archive.exp
+@@ -0,0 +1,106 @@
++# C-SKY printf selector and archive rescan regression tests.
++
++if ![istarget csky-*-*] {
++    return
++}
++
++global ar
++global as
++global ld
++global nm
++
++set sources {
++    printf-base printf-f printf-m printf-late-m printf-call printf-wrapper printf-small
++    printf-f-variant printf-m-variant archive-first archive-later archive-main
++    archive-trigger
++}
++foreach source $sources {
++    if ![ld_assemble $as $srcdir/$subdir/$source.s tmpdir/$source.o] {
++        unresolved "csky printf archive fixtures"
++        return
++    }
++}
++
++remote_file host delete "tmpdir/libprintf-variants.a"
++set output [run_host_cmd "$ar" "rcs tmpdir/libprintf-variants.a tmpdir/printf-wrapper.o tmpdir/printf-small.o tmpdir/printf-f-variant.o tmpdir/printf-m-variant.o"]
++if {![string match "" $output]} {
++    unresolved "csky printf archive fixtures"
++    return
++}
++
++foreach {input expected forbidden} {
++    printf-base __v2_printf$S __v2_printf$DFHLlOPpSSsWp
++    printf-f __v2_printf$DFHLlOPpSSsWp __v2_printf$S
++    printf-m __v2_printf$DFHLlMOPpSSsWp __v2_printf$S
++    printf-call __v2_printf$DFHLlMOPpSSsWp __v2_printf$S
++} {
++    set testname "csky printf archive selector $input"
++    if ![ld_simple_link $ld tmpdir/$input-result.o "-r tmpdir/$input.o tmpdir/libprintf-variants.a"] {
++        fail $testname
++        continue
++    }
++    set symbols [run_host_cmd "$nm" "tmpdir/$input-result.o"]
++    if {[string match "* T $expected*" $symbols]
++        && ![string match "* T $forbidden*" $symbols]} {
++        pass $testname
++    } else {
++        fail $testname
++    }
++}
++
++set testname "csky printf late requirement"
++if ![ld_simple_link $ld tmpdir/printf-late-result.o "-r tmpdir/printf-base.o tmpdir/libprintf-variants.a tmpdir/printf-late-m.o"] {
++    fail $testname
++} else {
++    set symbols [run_host_cmd "$nm" "tmpdir/printf-late-result.o"]
++    if {[string match "* T __v2_printf\$DFHLlMOPpSSsWp*" $symbols]
++        && ![string match "* T __v2_printf\$S*" $symbols]} {
++        pass $testname
++    } else {
++        fail $testname
++    }
++}
++
++remote_file host delete "tmpdir/libarchive-first.a"
++remote_file host delete "tmpdir/libarchive-later.a"
++set first [run_host_cmd "$ar" "rcs tmpdir/libarchive-first.a tmpdir/archive-first.o"]
++set later [run_host_cmd "$ar" "rcs tmpdir/libarchive-later.a tmpdir/archive-later.o"]
++if {![string match "" $first] || ![string match "" $later]} {
++    unresolved "csky archive order fixtures"
++    return
++}
++
++set testname "csky archive order rescan"
++if ![ld_simple_link $ld tmpdir/archive-order-result.o "-r tmpdir/archive-main.o tmpdir/libarchive-first.a tmpdir/libarchive-later.a"] {
++    fail $testname
++} else {
++    set symbols [run_host_cmd "$nm" "tmpdir/archive-order-result.o"]
++    if {[string match "* T early_symbol*" $symbols]
++        && [string match "* T later_symbol*" $symbols]} {
++        pass $testname
++    } else {
++        fail $testname
++    }
++}
++
++# The first archive is reached only during rescan.  Its marker must still
++# influence the printf member chosen from the archive in the middle.
++remote_file host delete "tmpdir/libarchive-marker.a"
++set marker [run_host_cmd "$ar" "rcs tmpdir/libarchive-marker.a tmpdir/archive-first.o"]
++if {![string match "" $marker]} {
++    unresolved "csky late archive marker fixture"
++    return
++}
++set testname "csky marker from rescanned archive"
++if ![ld_simple_link $ld tmpdir/archive-marker-result.o "-r tmpdir/printf-base.o tmpdir/archive-trigger.o tmpdir/libprintf-variants.a tmpdir/libarchive-marker.a tmpdir/libarchive-later.a"] {
++    fail $testname
++} else {
++    set symbols [run_host_cmd "$nm" "tmpdir/archive-marker-result.o"]
++    if {[string match "* T early_symbol*" $symbols]
++        && [string match "* T __v2_printf\$DFHLlMOPpSSsWp*" $symbols]
++        && ![string match "* T __v2_printf\$S*" $symbols]} {
++        pass $testname
++    } else {
++        fail $testname
++    }
++}
+diff --git a/ld/testsuite/ld-csky/printf-base.s b/ld/testsuite/ld-csky/printf-base.s
+new file mode 100644
+index 00000000..52fe849f
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-base.s
+@@ -0,0 +1,4 @@
++ .section .text
++ .globl __start
++__start:
++ .long __v2_printf
+diff --git a/ld/testsuite/ld-csky/printf-call.s b/ld/testsuite/ld-csky/printf-call.s
+new file mode 100644
+index 00000000..1f31bc83
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-call.s
+@@ -0,0 +1,4 @@
++ .section .text
++ .globl __start
++__start:
++ .long printf
+diff --git a/ld/testsuite/ld-csky/printf-f-variant.s b/ld/testsuite/ld-csky/printf-f-variant.s
+new file mode 100644
+index 00000000..9440500f
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-f-variant.s
+@@ -0,0 +1,6 @@
++ .section .text
++ .globl __v2_printf
++ .globl __v2_printf$DFHLlOPpSSsWp
++__v2_printf:
++__v2_printf$DFHLlOPpSSsWp:
++ .long 0
+diff --git a/ld/testsuite/ld-csky/printf-f.s b/ld/testsuite/ld-csky/printf-f.s
+new file mode 100644
+index 00000000..168b12de
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-f.s
+@@ -0,0 +1,5 @@
++ .section .text
++ .globl __start
++__start:
++ .long __v2_printf
++ .required _printf_f
+diff --git a/ld/testsuite/ld-csky/printf-late-m.s b/ld/testsuite/ld-csky/printf-late-m.s
+new file mode 100644
+index 00000000..cff809c1
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-late-m.s
+@@ -0,0 +1,3 @@
++ .section .text
++ .long 0
++ .required _printf_m
+diff --git a/ld/testsuite/ld-csky/printf-m-variant.s b/ld/testsuite/ld-csky/printf-m-variant.s
+new file mode 100644
+index 00000000..513c5119
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-m-variant.s
+@@ -0,0 +1,6 @@
++ .section .text
++ .globl __v2_printf
++ .globl __v2_printf$DFHLlMOPpSSsWp
++__v2_printf:
++__v2_printf$DFHLlMOPpSSsWp:
++ .long 0
+diff --git a/ld/testsuite/ld-csky/printf-m.s b/ld/testsuite/ld-csky/printf-m.s
+new file mode 100644
+index 00000000..55272cf2
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-m.s
+@@ -0,0 +1,5 @@
++ .section .text
++ .globl __start
++__start:
++ .long __v2_printf
++ .required _printf_m
+diff --git a/ld/testsuite/ld-csky/printf-small.s b/ld/testsuite/ld-csky/printf-small.s
+new file mode 100644
+index 00000000..d731795f
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-small.s
+@@ -0,0 +1,6 @@
++ .section .text
++ .globl __v2_printf
++ .globl __v2_printf$S
++__v2_printf:
++__v2_printf$S:
++ .long 0
+diff --git a/ld/testsuite/ld-csky/printf-wrapper.s b/ld/testsuite/ld-csky/printf-wrapper.s
+new file mode 100644
+index 00000000..fa2344b3
+--- /dev/null
++++ b/ld/testsuite/ld-csky/printf-wrapper.s
+@@ -0,0 +1,14 @@
++ .section .text
++ .globl printf
++printf:
++ .long __v2_printf
++ .required _printf_d
++ .required _printf_f
++ .required _printf_p
++ .required _printf_o
++ .required _printf_pre_padding
++ .required _printf_s
++ .required _printf_sizespec
++ .required _printf_widthprec
++ .required _printf_lld
++ .required _printf_m

@@ -1,0 +1,505 @@
+diff --git a/gcc/config.host b/gcc/config.host
+index 44f2f56ff..b1ba67d2d 100644
+--- a/gcc/config.host
++++ b/gcc/config.host
+@@ -253,6 +253,10 @@ case ${host} in
+     out_host_hook_obj="${out_host_hook_obj} host-i386-darwin.o"
+     host_xmake_file="${host_xmake_file} i386/x-darwin"
+     ;;
++  arm*-*-darwin* | aarch64*-*-darwin*)
++    out_host_hook_obj="${out_host_hook_obj} host-arm-darwin.o"
++    host_xmake_file="${host_xmake_file} arm/x-darwin"
++    ;;
+   powerpc-*-darwin*)
+     out_host_hook_obj="${out_host_hook_obj} host-ppc-darwin.o"
+     host_xmake_file="${host_xmake_file} rs6000/x-darwin"
+diff --git a/gcc/config/csky/abiv2_csky.c b/gcc/config/csky/abiv2_csky.c
+index 42820beb9..f04b6afcb 100644
+--- a/gcc/config/csky/abiv2_csky.c
++++ b/gcc/config/csky/abiv2_csky.c
+@@ -45,6 +45,11 @@
+ #include "tree-pass.h"
+ #include "context.h"
+ #include "cfgloop.h"
++#include "gimple.h"
++#include "gimple-iterator.h"
++#include "gimple-ssa.h"
++
++static gimple_opt_pass *make_pass_csky_required_printf (gcc::context *);
+ 
+ #include "cpplib.h"
+ 
+@@ -3236,6 +3241,14 @@ csky_option_override (void)
+         = { pass_cse_cc, "cse1",
+             1, PASS_POS_INSERT_AFTER};
+   register_pass (&cse_cc_info);
++
++  /* Required-format processing must run after SSA construction but before
++     the generic builtin folders can replace printf calls.  */
++  opt_pass *pass_required_printf = make_pass_csky_required_printf (g);
++  struct register_pass_info required_printf_info
++        = { pass_required_printf, "ssa",
++            1, PASS_POS_INSERT_AFTER};
++  register_pass (&required_printf_info);
+ }
+ 
+ 
+@@ -8568,6 +8581,325 @@ csky_init_libfuncs(void)
+     init_sync_libfuncs (UNITS_PER_WORD);
+ }
+ 
++/* The vendor compiler's saved CK803 assembly is the source for this
++   deliberately small format subset.  Formats outside it stay on the normal
++   libc entry points so an incomplete marker map cannot select an undersized
++   printf implementation.  */
++
++enum csky_required_printf_marker
++{
++  CSKY_PRINTF_D,
++  CSKY_PRINTF_S,
++  CSKY_PRINTF_O,
++  CSKY_PRINTF_P,
++  CSKY_PRINTF_WIDTHPREC,
++  CSKY_PRINTF_SIZESPEC,
++  CSKY_PRINTF_PRE_PADDING,
++  CSKY_PRINTF_F,
++  CSKY_PRINTF_M
++};
++
++static const char *const csky_required_printf_marker_names[] =
++{
++  "d", "s", "o", "p", "widthprec", "sizespec", "pre_padding",
++  "f", "m"
++};
++
++#define CSKY_MAX_REQUIRED_PRINTF_MARKERS 64
++
++static bool
++csky_parse_required_printf_format (const char *format,
++                                   unsigned char *markers,
++                                   unsigned int *nmarkers)
++{
++  const char *p = format;
++  bool saw_conversion = false;
++  bool saw_unmarked_u = false;
++  bool saw_d_marker = false;
++
++  *nmarkers = 0;
++  while (*p)
++    {
++      if (*p++ != '%')
++        continue;
++
++      if (*p == '%')
++        {
++          p++;
++          continue;
++        }
++
++      /* The observed implementation supports the zero-padding form used by
++         the TXW probe.  Other flags and dynamic widths fall back to libc.  */
++      bool zero_pad = false;
++      if (*p == '0')
++        {
++          zero_pad = true;
++          p++;
++        }
++      else if (*p == '-' || *p == '+' || *p == ' ' || *p == '#'
++               || *p == '\'')
++        return false;
++
++      bool have_width = false;
++      if (*p == '*')
++        return false;
++      while (*p >= '0' && *p <= '9')
++        {
++          have_width = true;
++          p++;
++        }
++
++      bool have_precision = false;
++      bool have_precision_digits = false;
++      if (*p == '.')
++        {
++          have_precision = true;
++          p++;
++          if (*p == '*')
++            return false;
++          while (*p >= '0' && *p <= '9')
++            {
++              have_precision_digits = true;
++              p++;
++            }
++        }
++
++      bool long_modifier = false;
++      bool long_long_modifier = false;
++      if (*p == 'l')
++        {
++          long_modifier = true;
++          p++;
++          if (*p == 'l')
++            {
++              long_long_modifier = true;
++              p++;
++            }
++        }
++      else if (*p == 'h' || *p == 'j' || *p == 'z' || *p == 't'
++               || *p == 'L')
++        return false;
++
++      if (!*p)
++        return false;
++
++      char conversion = *p++;
++      int marker = -1;
++      saw_conversion = true;
++
++      switch (conversion)
++        {
++        case 'd':
++          if (long_long_modifier)
++            marker = CSKY_PRINTF_SIZESPEC;
++          else
++            marker = CSKY_PRINTF_D;
++          break;
++        case 'u':
++          /* In the observed probe, %u adds no distinct requirement; it is
++             handled by the decimal support selected for the same call.  */
++          if (long_modifier || long_long_modifier)
++            return false;
++          saw_unmarked_u = true;
++          marker = -1;
++          break;
++        case 'x':
++          if (long_modifier || long_long_modifier)
++            return false;
++          marker = CSKY_PRINTF_P;
++          break;
++        case 'p':
++          if (long_modifier || long_long_modifier || have_precision)
++            return false;
++          marker = CSKY_PRINTF_P;
++          break;
++        case 's':
++          if (long_modifier || long_long_modifier || zero_pad)
++            return false;
++          marker = CSKY_PRINTF_S;
++          break;
++        case 'f':
++          if (long_modifier || long_long_modifier || zero_pad
++              || (have_precision && !have_precision_digits))
++            return false;
++          marker = CSKY_PRINTF_F;
++          break;
++        default:
++          return false;
++        }
++
++      if (marker >= 0)
++        {
++          if (*nmarkers == CSKY_MAX_REQUIRED_PRINTF_MARKERS)
++            return false;
++          markers[(*nmarkers)++] = marker;
++          if (marker == CSKY_PRINTF_D)
++            saw_d_marker = true;
++        }
++
++      /* C-SKY ABI-v2 uses 32-bit long.  The saved vendor output uses the
++         ordinary decimal marker for %ld and a size marker for %lld.  */
++      if (long_long_modifier && conversion != 'd')
++        return false;
++
++      if (zero_pad && have_width)
++        {
++          if (conversion != 'x' || have_precision)
++            return false;
++          if (*nmarkers == CSKY_MAX_REQUIRED_PRINTF_MARKERS)
++            return false;
++          markers[(*nmarkers)++] = CSKY_PRINTF_PRE_PADDING;
++        }
++      else if (have_width || (have_precision && conversion != 'f'))
++        return false;
++    }
++
++  /* The combined vendor probe shows %u only alongside %d.  Do not route it
++     through a helper unless this call also selects the decimal support.  */
++  return (saw_conversion && *nmarkers != 0
++          && (!saw_unmarked_u || saw_d_marker));
++}
++
++static GTY(()) tree csky_vprintf_printf_decl;
++static GTY(()) tree csky_vprintf_snprintf_decl;
++
++static tree
++csky_get_vprintf_decl (tree original, bool snprintf_p)
++{
++  tree *cached_decl = snprintf_p ? &csky_vprintf_snprintf_decl
++                                  : &csky_vprintf_printf_decl;
++  const char *name = snprintf_p ? "__cskyvprintfsnprintf"
++                                 : "__cskyvprintfprintf";
++
++  if (*cached_decl == NULL_TREE)
++    {
++      tree decl = build_decl (UNKNOWN_LOCATION, FUNCTION_DECL,
++                              get_identifier (name), TREE_TYPE (original));
++      TREE_PUBLIC (decl) = 1;
++      DECL_EXTERNAL (decl) = 1;
++      DECL_ARTIFICIAL (decl) = 1;
++      TREE_USED (decl) = 1;
++      DECL_ATTRIBUTES (decl) = DECL_ATTRIBUTES (original);
++      *cached_decl = decl;
++    }
++
++  return *cached_decl;
++}
++
++namespace
++{
++
++const pass_data pass_data_csky_required_printf =
++{
++  GIMPLE_PASS, /* type */
++  "csky_required_printf", /* name */
++  OPTGROUP_NONE, /* optinfo_flags */
++  TV_NONE, /* tv_id */
++  PROP_ssa, /* properties_required */
++  0, /* properties_provided */
++  0, /* properties_destroyed */
++  0, /* todo_flags_start */
++  0, /* todo_flags_finish */
++};
++
++class pass_csky_required_printf : public gimple_opt_pass
++{
++public:
++  pass_csky_required_printf (gcc::context *ctxt)
++    : gimple_opt_pass (pass_data_csky_required_printf, ctxt)
++  {}
++
++  opt_pass *clone () { return new pass_csky_required_printf (m_ctxt); }
++  unsigned int execute (function *);
++};
++
++unsigned int
++pass_csky_required_printf::execute (function *fun)
++{
++  if (!flag_required_printf)
++    return 0;
++
++  bool changed = false;
++  basic_block bb;
++  FOR_EACH_BB_FN (bb, fun)
++    {
++      gimple_stmt_iterator gsi;
++      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
++        {
++          gimple *stmt = gsi_stmt (gsi);
++          if (gimple_code (stmt) != GIMPLE_CALL)
++            continue;
++
++          tree original = gimple_call_fndecl (stmt);
++          if (!original
++              || DECL_BUILT_IN_CLASS (original) != BUILT_IN_NORMAL)
++            continue;
++
++          enum built_in_function code = DECL_FUNCTION_CODE (original);
++          bool snprintf_p;
++          unsigned int format_arg;
++          if (code == BUILT_IN_PRINTF)
++            {
++              snprintf_p = false;
++              format_arg = 0;
++            }
++          else if (code == BUILT_IN_SNPRINTF)
++            {
++              snprintf_p = true;
++              format_arg = 2;
++            }
++          else
++            continue;
++
++          if (gimple_call_num_args (stmt) <= format_arg)
++            continue;
++
++          const char *format = c_getstr (gimple_call_arg (stmt, format_arg));
++          if (!format)
++            continue;
++
++          unsigned char markers[CSKY_MAX_REQUIRED_PRINTF_MARKERS];
++          unsigned int nmarkers;
++          if (!csky_parse_required_printf_format (format, markers, &nmarkers))
++            continue;
++
++          if (nmarkers)
++            {
++              char asm_template[CSKY_MAX_REQUIRED_PRINTF_MARKERS * 48];
++              unsigned int offset = 0;
++              for (unsigned int i = 0; i < nmarkers; i++)
++                offset += snprintf (asm_template + offset,
++                                    sizeof (asm_template) - offset,
++                                    "%s.required _printf_%s",
++                                    i ? "\n\t" : "\t",
++                                    csky_required_printf_marker_names[markers[i]]);
++
++              gasm *required = gimple_build_asm_vec (asm_template, NULL, NULL,
++                                                     NULL, NULL);
++              gimple_asm_set_volatile (required, true);
++              gimple_set_location (required, gimple_location (stmt));
++              gsi_insert_before (&gsi, required, GSI_SAME_STMT);
++            }
++
++          gimple_call_set_fndecl (stmt,
++                                  csky_get_vprintf_decl (original, snprintf_p));
++          update_stmt (stmt);
++          changed = true;
++        }
++    }
++
++  return changed ? TODO_rebuild_cgraph_edges : 0;
++}
++
++} // anon namespace
++
++static gimple_opt_pass *
++make_pass_csky_required_printf (gcc::context *ctxt)
++{
++  return new pass_csky_required_printf (ctxt);
++}
++
+ 
+ /* Return cost of the memory address x.
+    For csky, it is same cost between (register) and (register + offset)
+diff --git a/gcc/config/csky/abiv2_csky.opt b/gcc/config/csky/abiv2_csky.opt
+index a7bbc5b48..20e5a9066 100644
+--- a/gcc/config/csky/abiv2_csky.opt
++++ b/gcc/config/csky/abiv2_csky.opt
+@@ -230,6 +230,10 @@ mrequired-attr-fpu-abi
+ Target Report Var(flag_required_attr_fpu_abi) Init(1)
+ Enable required csky attribute for fpu abi.
+ 
++mrequired-printf
++Target Report Var(flag_required_printf) Init(1)
++Emit C-SKY required-format markers and use the C-SKY printf helpers.
++
+ msim
+ Target
+ Use the simulator runtime.
+diff --git a/gcc/config/host-darwin.c b/gcc/config/host-darwin.c
+index 10d243ce4..6105218e7 100644
+--- a/gcc/config/host-darwin.c
++++ b/gcc/config/host-darwin.c
+@@ -24,7 +24,8 @@
+ #include "config/host-darwin.h"
+ 
+ /* Yes, this is really supposed to work.  */
+-static char pch_address_space[1024*1024*1024] __attribute__((aligned (4096)));
++/* Apple Silicon hosts use 16 KiB pages.  The PCH mapping must be page-aligned.  */
++static char pch_address_space[1024*1024*1024] __attribute__((aligned (16384)));
+ 
+ /* Return the address of the PCH address space, if the PCH will fit in it.  */
+ 
+diff --git a/gcc/config/arm/host-arm-darwin.c b/gcc/config/arm/host-arm-darwin.c
+new file mode 100644
+index 000000000..220c19028
+--- /dev/null
++++ b/gcc/config/arm/host-arm-darwin.c
+@@ -0,0 +1,10 @@
++/* Darwin host hooks for native Arm hosts.  */
++
++#include "config.h"
++#include "system.h"
++#include "coretypes.h"
++#include "hosthooks.h"
++#include "hosthooks-def.h"
++#include "config/host-darwin.h"
++
++const struct host_hooks host_hooks = HOST_HOOKS_INITIALIZER;
+diff --git a/gcc/config/arm/x-darwin b/gcc/config/arm/x-darwin
+new file mode 100644
+index 000000000..a352cf647
+--- /dev/null
++++ b/gcc/config/arm/x-darwin
+@@ -0,0 +1,3 @@
++host-arm-darwin.o : $(srcdir)/config/arm/host-arm-darwin.c
++	$(COMPILE) $<
++	$(POSTCOMPILE)
+diff --git a/gcc/testsuite/gcc.target/csky/required-printf-disabled.c b/gcc/testsuite/gcc.target/csky/required-printf-disabled.c
+new file mode 100644
+index 000000000..a76328ae9
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/csky/required-printf-disabled.c
+@@ -0,0 +1,18 @@
++/* { dg-do compile { target csky*-*-*abiv2* } } */
++/* { dg-options "-mcpu=ck803 -mfloat-abi=soft -Os -mno-required-printf" } */
++
++extern int printf (const char *, ...);
++extern int snprintf (char *, __SIZE_TYPE__, const char *, ...);
++
++int
++csky_required_printf_disabled (char *buffer, __SIZE_TYPE__ size, int value)
++{
++  return snprintf (buffer, size, "value=%d", value)
++         + printf ("value=%d\n", value);
++}
++
++/* -mno-required-printf disables both markers and helper calls.  */
++/* { dg-final { scan-assembler-not "\\.required _printf_" } } */
++/* { dg-final { scan-assembler-not "__cskyvprintf" } } */
++/* { dg-final { scan-assembler-times "jbsr[ \t]+snprintf" 1 } } */
++/* { dg-final { scan-assembler-times "jbsr[ \t]+printf" 1 } } */
+diff --git a/gcc/testsuite/gcc.target/csky/required-printf-fallback.c b/gcc/testsuite/gcc.target/csky/required-printf-fallback.c
+new file mode 100644
+index 000000000..f12fa4019
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/csky/required-printf-fallback.c
+@@ -0,0 +1,16 @@
++/* { dg-do compile { target csky*-*-*abiv2* } } */
++/* { dg-options "-mcpu=ck803 -mfloat-abi=soft -Os" } */
++
++extern int printf (const char *, ...);
++
++int
++csky_required_printf_fallback (const char *format, int value)
++{
++  return (printf (format, value) + printf ("%c", value)
++          + printf ("%s %u", "value", (unsigned int) value)
++          + printf ("%08.3x", (unsigned int) value));
++}
++
++/* Dynamic, unsupported, and incompletely marked formats keep libc calls.  */
++/* { dg-final { scan-assembler-not "\\.required _printf_" } } */
++/* { dg-final { scan-assembler-times "jbsr[ \t]+printf" 4 } } */
+diff --git a/gcc/testsuite/gcc.target/csky/required-printf.c b/gcc/testsuite/gcc.target/csky/required-printf.c
+new file mode 100644
+index 000000000..0940971bf
+--- /dev/null
++++ b/gcc/testsuite/gcc.target/csky/required-printf.c
+@@ -0,0 +1,27 @@
++/* { dg-do compile { target csky*-*-*abiv2* } } */
++/* { dg-options "-mcpu=ck803 -mfloat-abi=soft -Os" } */
++
++extern int printf (const char *, ...);
++extern int snprintf (char *, __SIZE_TYPE__, const char *, ...);
++
++int
++csky_required_printf_probe (char *buffer, __SIZE_TYPE__ size, int d,
++                            unsigned int u, unsigned int x, void *p,
++                            double f, const char *s, long l, long long ll)
++{
++  int n = snprintf (buffer, size,
++                    "d=%d u=%u x=%08x p=%p f=%.3f s=%s", d, u, x, p, f, s);
++  return n + printf ("count=%d text=%s long=%ld wide=%lld\n", d, s, l, ll);
++}
++
++/* These requirements are grounded in the saved vendor-default.s probe.  */
++/* { dg-final { scan-assembler-times "\\.required _printf_d" 3 } } */
++/* { dg-final { scan-assembler-times "\\.required _printf_s" 2 } } */
++/* { dg-final { scan-assembler-times "\\.required _printf_p" 2 } } */
++/* { dg-final { scan-assembler-times "\\.required _printf_pre_padding" 1 } } */
++/* { dg-final { scan-assembler-times "\\.required _printf_f" 1 } } */
++/* { dg-final { scan-assembler-times "\\.required _printf_sizespec" 1 } } */
++/* { dg-final { scan-assembler "__cskyvprintfsnprintf" } } */
++/* { dg-final { scan-assembler "__cskyvprintfprintf" } } */
++/* { dg-final { scan-assembler-not "jbsr[ \t]+snprintf" } } */
++/* { dg-final { scan-assembler-not "jbsr[ \t]+printf" } } */

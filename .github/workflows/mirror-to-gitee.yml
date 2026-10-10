@@ -13,6 +13,8 @@ concurrency:
 
 jobs:
   mirror:
+    # Force-pruning the mirror can remove raw archive URLs; keep paused until Gitee is migrated.
+    if: ${{ vars.GITEE_GIT_MIRROR_ENABLED == 'true' }}
     name: Force-sync branches and tags
     runs-on: ubuntu-latest
     timeout-minutes: 15

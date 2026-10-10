@@ -1,0 +1,126 @@
+diff --git a/CskyGCCToolchain.py b/CskyGCCToolchain.py
+--- a/CskyGCCToolchain.py
++++ b/CskyGCCToolchain.py
+@@ -425,6 +425,15 @@
+                 tar_path = os.path.join(self.src, "prebuilt-libs", "minilibc.tar.gz")
+                 self.extract_from_archive(tar_path, self.install_dir)
+                 self.add_stamp("extract-minilibc")
++            if (self.host == "macos-arm64" and not self.multilib and
++                    self.cpu == "ck803" and self.fpu == "soft" and
++                    self.endian == "little" and not self.has_stamp("select-ck803-minilibc")):
++                lib_dir = os.path.join(self.install_dir, self.triple, "lib")
++                ck803_dir = os.path.join(lib_dir, "ck803")
++                for name in ("crt0.o", "crtbegin.o", "crtend.o", "crti.o", "crtn.o",
++                             "libc.a", "libm.a", "libsemi.a", "libcc-rt.a"):
++                    self.copy(os.path.join(ck803_dir, name), os.path.join(lib_dir, name))
++                self.add_stamp("select-ck803-minilibc")
+ 
+         self.append_path(os.path.join(self.install_dir, "bin"))
+ 
+@@ -502,6 +511,9 @@
+                     config_cmd += '--disable-threads --with-newlib --disable-libssp '
+                 else:
+                     config_cmd += '--enable-threads=posix --disable-tls --enable-libssp '
++            if self.host == "macos-arm64":
++                # The pinned GCC supports ISL 0.14-0.16, not Homebrew's newer ISL.
++                config_cmd += ' --without-isl '
+             if not self.multilib:
+                 config_cmd += ' --disable-multilib --with-cpu={} --with-endian={} --with-float={} '.format(
+                     self.cpu, self.endian, self.fpu
+diff --git a/build-csky-gcc.py b/build-csky-gcc.py
+--- a/build-csky-gcc.py
++++ b/build-csky-gcc.py
+@@ -5,7 +5,46 @@
+ import logging
+ import sys
+ import os
++import platform
++import subprocess
+ from CskyGCCToolchain import CskyGccToolchain
++
++
++def validate_native_host(host):
++    native_hosts = {
++        "linux-arm64": "Linux",
++        "macos-arm64": "Darwin",
++    }
++    expected_system = native_hosts.get(host)
++    if expected_system is None:
++        return
++    system = platform.system()
++    machine = platform.machine().lower()
++    if system != expected_system or machine not in ("arm64", "aarch64"):
++        raise ValueError("--host {} requires native {} arm64 (found {} {})".format(
++            host, expected_system, system, machine))
++
++
++def git_output(src, *args):
++    try:
++        return subprocess.check_output(["git", "-C", src] + list(args),
++                                       stderr=subprocess.PIPE,
++                                       universal_newlines=True).strip()
++    except (OSError, subprocess.CalledProcessError) as exc:
++        raise ValueError("cannot read Git source checkout at {}: {}".format(src, exc))
++
++
++def resolve_build_version(src, explicit_version):
++    if explicit_version is not None:
++        return explicit_version, None
++    root = git_output(src, "rev-parse", "--show-toplevel")
++    if os.path.realpath(root) != os.path.realpath(src):
++        raise ValueError("--src must be the root of the Git source checkout: {}".format(root))
++    commit = git_output(src, "rev-parse", "--verify", "HEAD")
++    if git_output(src, "status", "--porcelain", "--untracked-files=all",
++                  "--ignore-submodules=none"):
++        raise ValueError("automatic --version requires a clean Git source checkout")
++    return "V3.10-source-{}".format(commit[:12]), commit
+ 
+ 
+ def process(args):
+@@ -29,12 +68,14 @@
+                                                                               "csky-elfabiv2",
+                                                                               "csky-elf-noneabiv2"],
+                                required=True)
+-    parent_parser.add_argument('--host', help="The host type for cross build compiler", default="x86_64",
+-                               choices=["x86_64", "i386", "mingw", "Win32", "Win64"])
++    parent_parser.add_argument('--host', help="The system that runs the toolchain; ARM hosts build natively",
++                               default="x86_64",
++                               choices=["x86_64", "i386", "mingw", "Win32", "Win64",
++                                        "linux-arm64", "macos-arm64"])
+     parent_parser.add_argument('--src', help="The directory of source code",
+                                required=True)
+     parent_parser.add_argument('--jobs', help="Allow N jobs at once, -1 means -j", default=16, type=int)
+-    parent_parser.add_argument('--version', help="The version number of LLVM toolchain")
++    parent_parser.add_argument('--version', help="GCC package label; defaults to V3.10-source-<12-char Git HEAD> from a clean --src checkout")
+     parent_parser.add_argument('--release-dir', help="The directory holds release tar")
+     parent_parser.add_argument('--rebuild', help="Rebuild the project", action="store_true")
+     parent_parser.add_argument('--no-rebuild', help="Don't rebuild the project", dest="rebuild", action="store_false")
+@@ -67,15 +108,25 @@
+     csky_gcc.add_argument('--disable-gdb', help="Don't build the gdb.", action="store_true")
+     csky_gcc.add_argument('--test-timeout', help="The timeout of test", default=-1, type=int)
+     parser.set_defaults(func=process)
++    args = parser.parse_args()
++    try:
++        validate_native_host(args.host)
++        args.version, source_commit = resolve_build_version(args.src, args.version)
++    except ValueError as exc:
++        parser.error(str(exc))
++    logfile = os.environ.get("TOOLCHAIN_BUILD_LOG", "build.log")
++    logging.basicConfig(filename=logfile, format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
+     logging.info(" ".join(sys.argv))
+-    args = parser.parse_args()
++    logging.info("GCC package label: %s", args.version)
++    print("GCC package label: {}".format(args.version))
++    if source_commit is not None:
++        logging.info("Source commit: %s", source_commit)
++        print("Source commit: {}".format(source_commit))
+     args.func(args)
+     return args
+ 
+ 
+ def main():
+-    logfile = os.environ.get("TOOLCHAIN_BUILD_LOG", "build.log")
+-    logging.basicConfig(filename=logfile, format="%(asctime)s:%(levelname)s:%(message)s", level=logging.INFO)
+     option_init()
+ 
+ 

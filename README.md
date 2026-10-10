@@ -4,26 +4,55 @@
 
 Prebuilt XuanTie / C-SKY GCC cross-toolchains. The Linux and Windows
 packages come from [XRVM](https://www.xrvm.cn/); the native macOS arm64
-package is a source build from the pinned V3.10 GCC/binutils tree. A
+package is a source build from the pinned V3.10 GCC/binutils tree in
+[c-sky/toolchain-build](https://github.com/c-sky/toolchain-build). A
 separate macOS arm64 compatibility package runs the Linux vendor tools
 through elfuse.
 
 These packages build bare-metal C-SKY ELF ABI v2 firmware with minilibc.
 Choose one host package; extract each into its own directory.
 
+Git keeps the packaging sources, documentation, and [SHA256SUMS](SHA256SUMS). The toolchain
+archives are distributed as assets on the pinned GitHub Release `toolchains-20261009`. A
+`git clone` does not download the binaries. Download the selected asset from the table and
+check its SHA-256 against the matching row in [SHA256SUMS](SHA256SUMS) before extraction.
+
 ## Repository Contents
 
 | Archive | Host system | Target | Notes | SHA256 |
 | --- | --- | --- | --- | --- |
-| `csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz` | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
-| `csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz` | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
-| `csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz` | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
-| `csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz` | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
-| `csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz` | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Vendor GCC 6.3.0 and GDB 7.12 through elfuse; complete ncurses5/tinfo5 runtime; GDB/MI and bounded hardware debugging verified | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
+| [`csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz) | Linux x86_64 | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `AD5C8564ADA7FBF77ACB952448B03A394D7AAFB56C945B2F8698D598076A69F9` |
+| [`csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-mingw-minilibc-20250328.tar.gz) | Windows MinGW | `csky-elfabiv2` / `csky-abiv2-elf` | GCC command/version paths use `6.3.0`; includes binutils, GDB, minilibc, multilibs | `3EB0FA8681F0996136902171855DB974659674ED3D6EBE7DDC6A601DDC0F27F2` |
+| [`csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-native-ml40-20260930.tar.xz) | macOS arm64, native | `csky-elfabiv2` / `csky-abiv2-elf` | GCC 6.3.0, binutils 2.27, 40 multilibs; C/C++; no GDB; requires Homebrew GMP/MPFR/libmpc | `c22d4d2566f9a5b49d58c8bb048805a899de596d04a75f7cd615f507717bc973` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz) | macOS arm64, elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Pinned Linux x86_64 vendor GCC 6.3.0 through bundled elfuse and guest sysroot; GDB wrapper omitted | `6fde30003fe1f9f2a4de296a04c372c698c1a45f60c442aeacc5e312bdec9ab6` |
+| [`csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz`](https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-gdb-20261009.tar.xz) | macOS arm64 elfuse | `csky-elfabiv2` / `csky-abiv2-elf` | Vendor GCC 6.3.0 and GDB 7.12 through elfuse; complete ncurses5/tinfo5 runtime; GDB/MI and bounded hardware debugging verified | `f6b5f7cc0998bf501f40688bd29e34b90cfc703763e89ce3775c7aa7c7aa0c45` |
 
 The vendor archives retain their upstream `20250328` date. The two
 `20260930` packages were assembled from the local, dated macOS build
 and elfuse evidence.
+
+## Native macOS source and patches
+
+The native macOS arm64 archive was built from upstream
+[`c-sky/toolchain-build`](https://github.com/c-sky/toolchain-build), release branch
+`gcc-6_3-Release_V3_10`, with these pinned sources:
+
+| Component | Upstream repository | Commit |
+| --- | --- | --- |
+| Build scripts and bundled minilibc | [c-sky/toolchain-build](https://github.com/c-sky/toolchain-build) | `54d18fdf0ce7f7f65663863424762c998fc14171` |
+| GCC 6.3.0 | [c-sky/gcc](https://github.com/c-sky/gcc) | `86994d519c83c7a9e1785774014eeacb6ca17adb` |
+| binutils 2.27 | [c-sky/binutils-gdb](https://github.com/c-sky/binutils-gdb) | `2409f5af709d5fef4f41cbeb30ef59bc1046b252` |
+
+This repository includes the three applied GCC/binutils patches, unchanged from
+the recorded build, in [patches/macos-arm64](patches/macos-arm64/README.md):
+[`gcc-combined.patch`](patches/macos-arm64/gcc-combined.patch),
+[`gcc-pushpop-ub.patch`](patches/macos-arm64/gcc-pushpop-ub.patch), and
+[`binutils-combined.patch`](patches/macos-arm64/binutils-combined.patch).
+It also includes a build-script patch captured from the preserved build source.
+The patch notes record their purpose, SHA-256 checksums, application order, and
+build command. The native archive retains its `source-info/` build notes and
+source patches. These patches describe the native source build; the elfuse
+packages run the vendor Linux binaries.
 
 ## Supported Target Variants
 
@@ -161,9 +190,19 @@ explicit-reset command was issued. Full application execution, another Mac,
 and general probe compatibility remain unproven. SDKTools and DebugServer are
 separate packages; neither is bundled in this archive.
 
-Rebuild from the pinned inputs with the standalone helper:
+Rebuild from the pinned inputs with the standalone helper. Download the existing elfuse
+bundle and Linux x86_64 vendor archive first, keeping their original filenames; the helper
+verifies their pinned hashes:
 
 ```sh
+curl -fL --retry 3 \
+  -o csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz
+curl -fL --retry 3 \
+  -o csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \
+  https://github.com/Taixin-Semiconductor/XuanTie-CSKY-Toolchains/releases/download/toolchains-20261009/csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
+shasum -a 256 csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz
+
 python3 scripts/refresh-elfuse-vendor.py \
   --bundle-archive csky-elfabiv2-tools-macos-arm64-elfuse-20260930.tar.xz \
   --vendor-archive csky-elfabiv2-tools-x86_64-minilibc-20250328.tar.gz \

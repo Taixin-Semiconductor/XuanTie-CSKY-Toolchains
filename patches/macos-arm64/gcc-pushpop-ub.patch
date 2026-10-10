@@ -1,0 +1,65 @@
+diff --git a/gcc/config/csky/abiv2_csky.c b/gcc/config/csky/abiv2_csky.c
+--- a/gcc/config/csky/abiv2_csky.c
++++ b/gcc/config/csky/abiv2_csky.c
+@@ -5885,8 +5885,9 @@
+   int i, num_regs;
+   int end_reg = -1;
+ 
+-  for (i = 0, num_regs = 0; i <= 32; i++)
+-    if(mask & (1 << i))
++  /* MASK has 32 bits: shifting a signed 1 by 31 or by 32 is undefined.  */
++  for (i = 0, num_regs = 0; i < CSKY_NGPR_REGS; i++)
++    if(mask & (1U << i))
+       num_regs++;
+ 
+   if(num_regs == 0)
+@@ -5894,41 +5895,41 @@
+ 
+   for(i = 11; i >= 4; i--)
+     {
+-      if (end_reg == -1 && (mask & (1 << i)))
++      if (end_reg == -1 && (mask & (1U << i)))
+         end_reg = i;
+ 
+-      if ((end_reg != -1) && !(mask & (1 << i)))
++      if ((end_reg != -1) && !(mask & (1U << i)))
+         return false;
+     }
+ 
+   end_reg = -1;
+   for(i = 17; i >= 16; i--)
+     {
+-      if (end_reg == -1 && (mask & (1 << i)))
++      if (end_reg == -1 && (mask & (1U << i)))
+         end_reg = i;
+ 
+-      if ((end_reg != -1) && !(mask & (1 << i)))
++      if ((end_reg != -1) && !(mask & (1U << i)))
+         return false;
+     }
+ 
+   for(i = 0; i <= 3; i++)
+-    if ((mask & (1 << i)))
++    if ((mask & (1U << i)))
+       return false;
+ 
+   for(i = 12; i <= 14; i++)
+-    if ((mask & (1 << i)))
++    if ((mask & (1U << i)))
+       return false;
+ 
+   /* r15 in the list */
+ 
+   for(i = 18; i <= 27; i++)
+-    if ((mask & (1 << i)))
++    if ((mask & (1U << i)))
+       return false;
+ 
+   /* r28 in the list */
+ 
+   for(i = 29; i <= 31; i++)
+-    if ((mask & (1 << i)))
++    if ((mask & (1U << i)))
+       return false;
+ 
+   return true;
